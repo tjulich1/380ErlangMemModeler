@@ -34,10 +34,11 @@ loop(DirectoryTable, BlockTable, BlockSize) ->
                     NewBlockTable = updateBlockTable(BlockTable, StartIndex, FileSize, BlockSize),
                     loop(NewDirectoryTable, NewBlockTable, BlockSize)
             end;
-            
         remove -> 
-            NewDirectoryTable = removeFileDirTable(DirectoryTable, removeFilePrompt()), 
-            loop(NewDirectoryTable, BlockTable, BlockSize);
+            RemoveItems = removeFileDirTable(DirectoryTable, removeFilePrompt()),
+            {NewTable, FileSize, Start} = RemoveItems,
+            NewBlockTable = freeBlocks(BlockTable, Start, FileSize, BlockSize),
+            loop(NewTable, NewBlockTable, BlockSize);
         print -> 
             printDirTableHeader(),
             printDirTable(DirectoryTable),
@@ -110,7 +111,7 @@ removeFileDirTable([H|T], Name) ->
 removeFileDirTableHelper(Searched, {Name, X, Y, Z}, Unsearched, NameToRemove) -> 
     if
         Name =:= NameToRemove ->
-            Searched++Unsearched;
+            {Searched++Unsearched, X, Y};
         true -> 
             removeFileDirTableHelper(Searched++[{Name, X, Y, Z}], hd(Unsearched), tl(Unsearched), NameToRemove)
     end.
@@ -146,12 +147,22 @@ calculateReqBlocks(FileSize, BlockSize) ->
             WholeBlocks
     end.
 
+freeBlocks([Head|Tail], 1, FileSize, BlockSize) ->
+    if 
+        FileSize =< 0 ->
+            [Head]++Tail;
+        true -> 
+            [{0,0}]++freeBlocks(Tail, 1, FileSize-BlockSize, BlockSize)
+    end;
+freeBlocks(BlockTable, StartBlock, FileSize, BlockSize) ->
+    freeBlocks(BlockTable, StartBlock - 1, FileSize, BlockSize).    
+
 updateBlockTable([], _, _, _) ->
     []; 
 updateBlockTable([{Used, Fragmented} | T], 1, FileSize, BlockSize) ->
     if 
         FileSize =< 0 ->
-            T;
+            [{Used, Fragmented}]++T;
         true ->
             if 
                 FileSize >= BlockSize ->
